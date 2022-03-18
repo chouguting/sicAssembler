@@ -8,7 +8,7 @@ const val WORD_SIZE = 3
 class Assembler(var inputLines:List<String> = listOf()) {
 
 
-
+    //把單行字串轉成指令
     private fun String.toInstruction():InstructionLine?{
         if(this.isEmpty()) return null
 
@@ -35,6 +35,7 @@ class Assembler(var inputLines:List<String> = listOf()) {
         return null
     }
 
+    //把字串List轉成指令物件List
     fun List<String>.toInstructions():List<InstructionLine>{
         val instructionList:MutableList<InstructionLine> = mutableListOf()
         for(instructionString in this){
@@ -46,7 +47,7 @@ class Assembler(var inputLines:List<String> = listOf()) {
     }
 
     fun assemble():String{
-        var resultStr = ""
+        var resultString = ""
         var locationCounter=0
         var startAddress = 0
         val instructionList = inputLines.toInstructions()
@@ -84,11 +85,21 @@ class Assembler(var inputLines:List<String> = listOf()) {
             }
         }
         val programLength = locationCounter - startAddress
+
+        if(instructionList[0].opCode == OPCode.START){
+            resultString += "H"
+            if(instructionList[0].label?.name!=null) {
+                resultString += instructionList[0].label?.name?.padStart(6, ' ')
+            }
+            resultString += Integer.toHexString(startAddress).padStart(6,'0')
+            resultString += Integer.toHexString(programLength).padStart(6,'0')
+        }
+
         //pass 2
-        for(inputLine in instructionList){
+        for(currentLine in instructionList){
 
         }
-        return resultStr
+        return resultString
     }
 
 }
@@ -101,6 +112,8 @@ fun String.isPseudoOpcode() = enumHasString<OPCode>(this) && OPCode.valueOf(this
 fun String.isOpcodeOrPseudoOpcode() =  enumHasString<OPCode>(this)
 fun Operand.startWithC() = this.value[0]=='C'
 fun Operand.startWithX() = this.value[0]=='X'
+fun Operand.toSixBit() = this.value.format("%06d")
+
 
 //這個enum中有沒有這個名字的值存在
 inline fun <reified T : Enum<T>> enumHasString(name: String): Boolean {
@@ -111,12 +124,7 @@ data class Operand(val value: String)
 
 data class Label(val name: String)
 
-data class InstructionLine(val label: Label?,val opCode: OPCode?,val operand: Operand?){
-
-}
-
-
-
+data class InstructionLine(val label: Label?,val opCode: OPCode?,val operand: Operand?)
 
 
 //opcode
