@@ -53,7 +53,7 @@ class Assembler(var inputLines: List<String> = listOf()) {
     fun getFullTRecord(startAddress: Int, length: Int, tRecordLine: String): String {
         var resultString = "T"
         resultString += Integer.toHexString(startAddress).padStart(6, '0').uppercase()
-        resultString += Integer.toHexString(length).padStart(0, '0').uppercase()
+        resultString += Integer.toHexString(length).padStart(2, '0').uppercase()
         resultString += tRecordLine
         return resultString
     }
@@ -143,15 +143,15 @@ class Assembler(var inputLines: List<String> = listOf()) {
             } else if (currentLine.isRealOpcode()) {
 
                 //如果這行指令是個真指令
-                var currentLineString = currentLine.opCode?.toHexString()?.uppercase() ?: ""
+                var currentLineString = currentLine.opCode?.toHexString()?.uppercase()?.padStart(2,'0') ?: ""
                 var xAndAddressBinaryString = if (currentLine.isIndexedAddressing()) "1" else "0"
                 if (currentLine.operand == null) {
                     xAndAddressBinaryString += "000000000000000"
                 } else {
-                    val addressBinary = Integer.toBinaryString(symbolTable.get(currentLine.operand.value) ?: 0)
+                    val addressBinary = Integer.toBinaryString(symbolTable.get(currentLine.getIndexForSymbolTable()) ?: 0)
                     xAndAddressBinaryString += addressBinary.padStart(15, '0')
                 }
-                currentLineString += Integer.toHexString(xAndAddressBinaryString.toInt(2)).uppercase()
+                currentLineString += Integer.toHexString(xAndAddressBinaryString.toInt(2)).padStart(4,'0').uppercase()
 
                 if (locationCounter + currentLine.opCode?.instructionLength!! - currentTRecordStartAddress > 30) {
                     resultString += getFullTRecord(
@@ -235,6 +235,7 @@ data class Operand(val value: String) {
     fun startWithX() = this.value[0] == 'X'
     fun startWithC() = this.value[0] == 'C'
     fun toSixBit() = this.value.format("%06d")
+
     fun cToAscii(): String? {
         if (!startWithC()) return null
         val convertLine = value.substring(2, value.length - 1).uppercase()
@@ -253,7 +254,7 @@ data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: 
     fun isPseudoOpcode() = this.opCode != null && this.opCode?.isPseudo
     fun isIndexedAddressing(): Boolean {
         if (operand == null) return false
-        return this.operand?.value?.uppercase()?.endsWith("X")!!
+        return this.operand?.value?.uppercase()?.endsWith(",X")!!
     }
 
     fun byteLength(): Int? {
@@ -261,6 +262,13 @@ data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: 
             return null
         }
         return if (operand.startWithC()) operand.value.length - 3 else (operand.value.length - 3) / 2
+    }
+
+    fun getIndexForSymbolTable():String{
+        if(isIndexedAddressing()){
+            return this.operand?.value?.substring(0,this.operand.value.length-2)?.trim()!!
+        }
+        return this.operand?.value!!
     }
 }
 
