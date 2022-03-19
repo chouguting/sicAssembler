@@ -2,16 +2,16 @@ package com.chouguting.sicAssembler
 
 import kotlin.system.exitProcess
 
-const val PSEUDO = -1
-const val WORD_SIZE = 3
+const val PSEUDO = -1    // Pseudo opcode
+const val WORD_SIZE = 3  //SIC中一個word的長度是3個byte
 
 class Assembler(var inputLines: List<String> = listOf()) {
     //把單行字串轉成指令
     private fun String.toInstruction(): InstructionLine? {
-        if (this.isEmpty()) return null
+        if (this.isEmpty()) return null  //如果是空字串 就不處理
 
-        if (this.trim()[0] == '.' || this.trim()[0] == '\n') return null
-        val splittedInstruction = this.uppercase().trim().split(" ", "\t")
+        if (this.trim()[0] == '.' || this.trim()[0] == '\n') return null //如果是註解或換行 就不處理
+        val splittedInstruction = this.uppercase().trim().split(" ", "\t") //將字串切割成不同部分(LABEL,OPCODE,OPERAND，雖然不一定都有)
         when (splittedInstruction.size) {
             //如果只有切出一段字串 代表一定是只有一個指令
             1 -> if (splittedInstruction[0].isRealOpcodeOrPseudoOpcode()) {
@@ -50,21 +50,23 @@ class Assembler(var inputLines: List<String> = listOf()) {
         return instructionList
     }
 
+    //生成出完整的一行T record
+    //需要傳入這個T record的起始位址(10進位) , T record的長度(10進位), T record內的指令(已轉換成16進為表示的)
     fun getFullTRecord(startAddress: Int, length: Int, tRecordLine: String): String {
-        var resultString = "T"
-        resultString += Integer.toHexString(startAddress).padStart(6, '0').uppercase()
-        resultString += Integer.toHexString(length).padStart(2, '0').uppercase()
-        resultString += tRecordLine
+        var resultString = "T" //T record的開頭
+        resultString += Integer.toHexString(startAddress).padStart(6, '0').uppercase() //T record的起始位址
+        resultString += Integer.toHexString(length).padStart(2, '0').uppercase()  //T record的長度
+        resultString += tRecordLine  //T record內的指令
         return resultString
     }
 
     //組譯
-    fun assemble(): String {
-        var resultString = ""
-        var locationCounter = 0
-        var startAddress = 0
-        val instructionList = inputLines.toInstructions()
-        val symbolTable: MutableMap<String, Int> = mutableMapOf()
+    fun assemble(): List<String> {
+        var resultStringList: MutableList<String> = mutableListOf<String>() //最後要回傳的obj結果
+        var locationCounter = 0  //location counter的位址(10進位)
+        var startAddress = 0   //程式的起始位址(10進位)
+        val instructionList = inputLines.toInstructions()  //把輸入的指令字串轉成指令物件List
+        val symbolTable: MutableMap<String, Int> = mutableMapOf()  //符號(Label)表
 
 
         //pass 1
@@ -77,6 +79,7 @@ class Assembler(var inputLines: List<String> = listOf()) {
 
             //如果讀到的這行指令有label 就要把label記錄起來
             if (currentLine.label != null) {
+                //重複Label是有問題的
                 if (symbolTable.get(currentLine.label.name) != null) {
                     println("duplicate label")
                     exitProcess(-1)
@@ -107,15 +110,19 @@ class Assembler(var inputLines: List<String> = listOf()) {
         val programLength = locationCounter - startAddress  //計算程式有多長
 
         //pass 2
-        locationCounter = startAddress
+        locationCounter = startAddress  //location counter重新計算
+        //先處理 H record (Header)
         if (instructionList[0].opCode == OPCode.START) {
-            resultString += "H"
-            if (instructionList[0].label?.name != null) {
-                resultString += instructionList[0].label?.name?.padEnd(6, ' ')
+            var headerString = ""
+            headerString += "H"
+            if (instructionList[0].label != null) {
+                headerString += instructionList[0].label?.name?.padEnd(6, ' ')   //如果START有LABEL 就要記下來
+            } else {
+                headerString += "".padEnd(6, ' ')  //如果START沒有LABEL 就留空
             }
-            resultString += Integer.toHexString(startAddress).uppercase().padStart(6, '0')
-            resultString += Integer.toHexString(programLength).uppercase().padStart(6, '0')
-            resultString += "\n"
+            headerString += Integer.toHexString(startAddress).uppercase().padStart(6, '0')  //紀錄程式起始位址
+            headerString += Integer.toHexString(programLength).uppercase().padStart(6, '0')  //紀錄程式長度
+            resultStringList.add(headerString)
         }
 
         //紀錄目前這行T record的長度 (不含前置資訊長度超過60個字元(或是30byte)就樣要換行)
@@ -125,58 +132,78 @@ class Assembler(var inputLines: List<String> = listOf()) {
         var currentTRecordStartAddress = locationCounter
 
         for (currentLine in instructionList) {
-            var operandAddress = 0
 
             if (currentLine.opCode == OPCode.START) {
+                //START已經處理過了 就跳過
                 continue
             } else if (currentLine.opCode == OPCode.END) {
+                //END代表要結束了
+                //縣看還有沒有剩下的T record需要紀錄的
                 if (currentTRecordString != "") {
-                    resultString += getFullTRecord(
-                        currentTRecordStartAddress,
-                        currentTRecordLength,
-                        currentTRecordString
+                    resultStringList.add(
+                        getFullTRecord(
+                            currentTRecordStartAddress,
+                            currentTRecordLength,
+                            currentTRecordString
+                        )
                     )
-                    resultString += "\n"
+
                 }
-                resultString += "E" + Integer.toHexString(startAddress).uppercase().padStart(6, '0')
+                //紀錄E record
+                resultStringList.add("E" + Integer.toHexString(startAddress).uppercase().padStart(6, '0'))
 
             } else if (currentLine.isRealOpcode()) {
-
                 //如果這行指令是個真指令
-                var currentLineString = currentLine.opCode?.toHexString()?.uppercase()?.padStart(2,'0') ?: ""
-                var xAndAddressBinaryString = if (currentLine.isIndexedAddressing()) "1" else "0"
-                if (currentLine.operand == null) {
-                    xAndAddressBinaryString += "000000000000000"
-                } else {
-                    val addressBinary = Integer.toBinaryString(symbolTable.get(currentLine.getIndexForSymbolTable()) ?: 0)
-                    xAndAddressBinaryString += addressBinary.padStart(15, '0')
-                }
-                currentLineString += Integer.toHexString(xAndAddressBinaryString.toInt(2)).padStart(4,'0').uppercase()
+                var currentLineString = currentLine.opCode?.toHexString()?.uppercase() ?: ""  //先取出opcode的16進位表示
+                //看看這行指令有沒有用isIndexedAddressing
+                //如果有 就把X_bit設為1
+                var xAndAddressBinaryString = if (currentLine.isIndexedAddressing()) "1" else "0"   //先以2進位紀錄_bit和address欄位
 
+                if (currentLine.operand == null) {
+                    xAndAddressBinaryString += "000000000000000" //如果這行指令沒有operand，address就全部填0
+                } else {
+                    //如果這行指令有operand，就去symbol table中找這個label所對應的address
+                    val addressBinary =
+                        Integer.toBinaryString(symbolTable.get(currentLine.getIndexForSymbolTable()) ?: 0)
+                    xAndAddressBinaryString += addressBinary.padStart(15, '0')  //沒有滿要補0
+                }
+
+                //把以進位紀錄_bit和address欄位轉成16進位表示
+                currentLineString += Integer.toHexString(xAndAddressBinaryString.toInt(2)).padStart(4, '0').uppercase()
+
+                //如果目前這行的T record已經滿了(最多30byte) 就要換行
                 if (locationCounter + currentLine.opCode?.instructionLength!! - currentTRecordStartAddress > 30) {
-                    resultString += getFullTRecord(
-                        currentTRecordStartAddress,
-                        currentTRecordLength,
-                        currentTRecordString
+                    //把邵一段T record寫到結果中
+                    resultStringList.add(
+                        getFullTRecord(
+                            currentTRecordStartAddress,
+                            currentTRecordLength,
+                            currentTRecordString
+                        )
                     )
-                    resultString += "\n"
+                    //重新計算T record的起始位址，長度，並清空T record的字串
                     currentTRecordString = ""
                     currentTRecordLength = 0
                     currentTRecordStartAddress = locationCounter
                 }
-                locationCounter += currentLine.opCode?.instructionLength!!
+
+                //記錄到T record
+                locationCounter += currentLine.opCode.instructionLength
                 currentTRecordString += currentLineString
                 currentTRecordLength += currentLine.opCode.instructionLength
             } else if (currentLine.opCode == OPCode.WORD) {
+                //如果這行指令是WORD
+                //先把operand以16進位記下來
                 val currentLineString =
                     Integer.toHexString(currentLine.operand?.value?.toInt()!!).uppercase().padStart(6, '0')
                 if (locationCounter + WORD_SIZE - currentTRecordStartAddress > 30) {
-                    resultString += getFullTRecord(
-                        currentTRecordStartAddress,
-                        currentTRecordLength,
-                        currentTRecordString
+                    resultStringList.add(
+                        getFullTRecord(
+                            currentTRecordStartAddress,
+                            currentTRecordLength,
+                            currentTRecordString
+                        )
                     )
-                    resultString += "\n"
                     currentTRecordString = ""
                     currentTRecordLength = 0
                     currentTRecordStartAddress = locationCounter
@@ -186,18 +213,23 @@ class Assembler(var inputLines: List<String> = listOf()) {
                 currentTRecordLength += WORD_SIZE
 
             } else if (currentLine.opCode == OPCode.BYTE) {
+                //如果這行指令是BYTE
+                //就要判斷用戶要存Hex還是Char(String)
+                //如果是Hex就直接存下來
+                //如果是Char(String)就要先把operand轉成16進位表示再存下來
                 val currentLineString =
                     if (currentLine.operand?.startWithX()!!) currentLine.operand.value.substring(
                         2,
                         currentLine.operand.value.length - 1
                     ).uppercase() else currentLine.operand.cToAscii()
                 if (locationCounter + currentLine.byteLength()!! - currentTRecordStartAddress > 30) {
-                    resultString += getFullTRecord(
-                        currentTRecordStartAddress,
-                        currentTRecordLength,
-                        currentTRecordString
+                    resultStringList.add(
+                        getFullTRecord(
+                            currentTRecordStartAddress,
+                            currentTRecordLength,
+                            currentTRecordString
+                        )
                     )
-                    resultString += "\n"
                     currentTRecordString = ""
                     currentTRecordLength = 0
                     currentTRecordStartAddress = locationCounter
@@ -213,17 +245,17 @@ class Assembler(var inputLines: List<String> = listOf()) {
                 locationCounter += currentLine.operand?.value?.toInt()!!
             }
         }
-        return resultString
+        return resultStringList
     }
 
 }
 
-fun String.isRealOpcode() = enumHasString<OPCode>(this) && !OPCode.valueOf(this).isPseudo
-fun String.toOpcode(): OPCode = OPCode.valueOf(this)
-fun String.toOperand(): Operand = Operand(this)
-fun String.toLabel(): Label = Label(this)
-fun String.isPseudoOpcode() = enumHasString<OPCode>(this) && OPCode.valueOf(this).isPseudo
-fun String.isRealOpcodeOrPseudoOpcode() = enumHasString<OPCode>(this)
+fun String.isRealOpcode() = enumHasString<OPCode>(this) && !OPCode.valueOf(this).isPseudo  //如果字串是真的指令就回傳true
+fun String.toOpcode(): OPCode = OPCode.valueOf(this)  //字串轉換成OPCode ENUM 型態
+fun String.toOperand(): Operand = Operand(this)  //字串轉換成Operand型態
+fun String.toLabel(): Label = Label(this)  //字串轉換成Label型態
+fun String.isPseudoOpcode() = enumHasString<OPCode>(this) && OPCode.valueOf(this).isPseudo //如果字串是pseudo指令就回傳true
+fun String.isRealOpcodeOrPseudoOpcode() = enumHasString<OPCode>(this) //如果字串是真的指令或是pseudo指令就回傳true
 
 
 //這個enum中有沒有這個名字的值存在
@@ -232,10 +264,11 @@ inline fun <reified T : Enum<T>> enumHasString(name: String): Boolean {
 }
 
 data class Operand(val value: String) {
-    fun startWithX() = this.value[0] == 'X'
-    fun startWithC() = this.value[0] == 'C'
-    fun toSixBit() = this.value.format("%06d")
+    fun startWithX() = this.value[0] == 'X'  //如果operand的第一個字是X(代表存的是Hex)就回傳true
+    fun startWithC() = this.value[0] == 'C'  //如果operand的第一個字是C(代表存的是Char)就回傳true
 
+    //將operand中的多個Char轉成已16進位表示的Ascii code字串
+    //兩個16進位數字能表示一個字元
     fun cToAscii(): String? {
         if (!startWithC()) return null
         val convertLine = value.substring(2, value.length - 1).uppercase()
@@ -247,26 +280,30 @@ data class Operand(val value: String) {
     }
 }
 
-data class Label(val name: String)
+data class Label(val name: String)  //標籤
 
 data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: Operand?) {
-    fun isRealOpcode() = this.opCode != null && !(this.opCode?.isPseudo!!)
-    fun isPseudoOpcode() = this.opCode != null && this.opCode?.isPseudo
+    fun isRealOpcode() = this.opCode != null && !(this.opCode.isPseudo)
+    fun isPseudoOpcode() = this.opCode != null && this.opCode.isPseudo
     fun isIndexedAddressing(): Boolean {
         if (operand == null) return false
-        return this.operand?.value?.uppercase()?.endsWith(",X")!!
+        return this.operand.value.uppercase().endsWith(",X") //如果operand的最後一個字是,X就代表是Indexed Addressing
     }
 
+    //計算這行指令的byte長度
     fun byteLength(): Int? {
         if (opCode != OPCode.BYTE || operand == null) {
             return null
         }
+        //如果讀到的這行指令是BYTE 然後operand又是C開頭 代表要存的是字元(char) ，有幾個字元就需要幾個byte的空間
+        //如果operand又是X開頭 代表要存的是數字 ，兩個(16進位)數字需要一個byte的空間
+        //都要減3是因為要扣掉 C'' 或 X'' 所佔的三個字元
         return if (operand.startWithC()) operand.value.length - 3 else (operand.value.length - 3) / 2
     }
 
-    fun getIndexForSymbolTable():String{
-        if(isIndexedAddressing()){
-            return this.operand?.value?.substring(0,this.operand.value.length-2)?.trim()!!
+    fun getIndexForSymbolTable(): String {
+        if (isIndexedAddressing()) {
+            return this.operand?.value?.substring(0, this.operand.value.length - 2)?.trim()!!
         }
         return this.operand?.value!!
     }
@@ -308,8 +345,9 @@ enum class OPCode(val hex: Int, val isPseudo: Boolean = false, val instructionLe
     RESB(PSEUDO, true, 0),
     END(PSEUDO, true, 0);
 
+    //將opcode轉乘16進位表示的字串
     fun toHexString(): String {
-        return Integer.toHexString(hex).uppercase()
+        return Integer.toHexString(hex).uppercase().padStart(2, '0')
     }
 }
 
