@@ -130,16 +130,18 @@ class Assembler(var inputLines: List<String> = listOf()) {
         var currentTRecordLength = 0
         var currentTRecordString = ""
         var currentTRecordStartAddress = locationCounter
+        var hasToChangeLine = false  //如果遇到RESW或RESB的區塊，下一次就要換行
 
         for (currentLine in instructionList) {
 
             if (currentLine.opCode == OPCode.START) {
                 //START已經處理過了 就跳過
+                hasToChangeLine = false
                 continue
             } else if (currentLine.opCode == OPCode.END) {
                 //END代表要結束了
                 //縣看還有沒有剩下的T record需要紀錄的
-                if (currentTRecordString != "") {
+                if (currentTRecordString != "" || hasToChangeLine) {
                     resultStringList.add(
                         getFullTRecord(
                             currentTRecordStartAddress,
@@ -149,6 +151,7 @@ class Assembler(var inputLines: List<String> = listOf()) {
                     )
 
                 }
+                hasToChangeLine = false
                 //紀錄E record
                 resultStringList.add("E" + Integer.toHexString(startAddress).uppercase().padStart(6, '0'))
 
@@ -172,7 +175,7 @@ class Assembler(var inputLines: List<String> = listOf()) {
                 currentLineString += Integer.toHexString(xAndAddressBinaryString.toInt(2)).padStart(4, '0').uppercase()
 
                 //如果目前這行的T record已經滿了(最多30byte) 就要換行
-                if (locationCounter + currentLine.opCode?.instructionLength!! - currentTRecordStartAddress > 30) {
+                if (locationCounter + currentLine.opCode?.instructionLength!! - currentTRecordStartAddress > 30 || hasToChangeLine) {
                     //把邵一段T record寫到結果中
                     resultStringList.add(
                         getFullTRecord(
@@ -185,8 +188,9 @@ class Assembler(var inputLines: List<String> = listOf()) {
                     currentTRecordString = ""
                     currentTRecordLength = 0
                     currentTRecordStartAddress = locationCounter
-                }
 
+                }
+                hasToChangeLine = false
                 //記錄到T record
                 locationCounter += currentLine.opCode.instructionLength
                 currentTRecordString += currentLineString
@@ -196,7 +200,7 @@ class Assembler(var inputLines: List<String> = listOf()) {
                 //先把operand以16進位記下來
                 val currentLineString =
                     Integer.toHexString(currentLine.operand?.value?.toInt()!!).uppercase().padStart(6, '0')
-                if (locationCounter + WORD_SIZE - currentTRecordStartAddress > 30) {
+                if (locationCounter + WORD_SIZE - currentTRecordStartAddress > 30 || hasToChangeLine) {
                     resultStringList.add(
                         getFullTRecord(
                             currentTRecordStartAddress,
@@ -208,6 +212,7 @@ class Assembler(var inputLines: List<String> = listOf()) {
                     currentTRecordLength = 0
                     currentTRecordStartAddress = locationCounter
                 }
+                hasToChangeLine = false
                 locationCounter += WORD_SIZE
                 currentTRecordString += currentLineString
                 currentTRecordLength += WORD_SIZE
@@ -222,7 +227,7 @@ class Assembler(var inputLines: List<String> = listOf()) {
                         2,
                         currentLine.operand.value.length - 1
                     ).uppercase() else currentLine.operand.cToAscii()
-                if (locationCounter + currentLine.byteLength()!! - currentTRecordStartAddress > 30) {
+                if (locationCounter + currentLine.byteLength()!! - currentTRecordStartAddress > 30 || hasToChangeLine) {
                     resultStringList.add(
                         getFullTRecord(
                             currentTRecordStartAddress,
@@ -234,15 +239,18 @@ class Assembler(var inputLines: List<String> = listOf()) {
                     currentTRecordLength = 0
                     currentTRecordStartAddress = locationCounter
                 }
+                hasToChangeLine = false
                 locationCounter += currentLine.byteLength()!!
                 currentTRecordString += currentLineString
                 currentTRecordLength += currentLine.byteLength()!!
             } else if (currentLine.opCode == OPCode.RESW) {
                 //如果讀到的這行指令是RESW 就加operand的數字*WORD_SIZE的長度到location counter中
                 locationCounter += WORD_SIZE * currentLine.operand?.value?.toInt()!!
+                hasToChangeLine = true
             } else if (currentLine.opCode == OPCode.RESB) {
                 //如果讀到的這行指令是RESB 代表需要operand個byte的空間 (加到location counter中)
                 locationCounter += currentLine.operand?.value?.toInt()!!
+                hasToChangeLine = true
             }
         }
         return resultStringList
