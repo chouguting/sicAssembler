@@ -308,7 +308,7 @@ data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: 
         //都要減3是因為要扣掉 C'' 或 X'' 所佔的三個字元
         return if (operand.startWithC()) operand.value.length - 3 else (operand.value.length - 3) / 2
     }
-
+    //取去SymbolTable中搜尋的 key, 因為有可能operand中帶有,X
     fun getIndexForSymbolTable(): String {
         if (isIndexedAddressing()) {
             return this.operand?.value?.substring(0, this.operand.value.length - 2)?.trim()!!

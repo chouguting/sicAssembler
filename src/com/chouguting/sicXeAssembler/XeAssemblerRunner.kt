@@ -2,7 +2,7 @@ package com.chouguting.sicXeAssembler
 import java.io.FileWriter
 
 fun main(args:Array<String>){
-    val fileLoader = FileLoader(if (args.isEmpty()) "test.asm" else args[0])
+    val fileLoader = FileLoader(if (args.isEmpty()) "inputXe.asm" else args[0])
     val inputLines = fileLoader.loadFileToLines()  //把檔案中的字讀入為string的list
     val xeAssembler = XeAssembler(inputLines)
     val assembleResult = xeAssembler.assemble()
