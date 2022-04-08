@@ -247,7 +247,7 @@ class XeAssembler(var inputLines: List<String> = listOf()) {
 
                         if(symbolTable.get(currentLine.getIndexForSymbolTable()) == null && currentLine.isImmediateAddressing()){
                             //如果找不到這個label 又是立即定址 代表是個單純的立即值
-                            displacement = "%03x".format(targetAddress).takeLast(3).uppercase()
+                            displacement = "%04x".format(targetAddress).takeLast(4).uppercase()
                         }else if(pcOffset >= -2048 && pcOffset <= 2047){
                             //如果PC relative addressing可以用
                             //bpe是010
