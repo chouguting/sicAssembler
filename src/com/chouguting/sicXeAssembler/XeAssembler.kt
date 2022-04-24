@@ -16,11 +16,11 @@ class XeAssembler(var inputLines: List<String> = listOf()) {
 
         var isFormat4 = false //是否是format4的指令
         //如果有加號代表是Format 4的指令
-        if(splittedInstruction[0].startsWith("+")){
+        if (splittedInstruction[0].startsWith("+")) {
             isFormat4 = true
             splittedInstruction[0] = splittedInstruction[0].substring(1)
         }
-        if(splittedInstruction.size >=2 && splittedInstruction[1].startsWith("+")){
+        if (splittedInstruction.size >= 2 && splittedInstruction[1].startsWith("+")) {
             isFormat4 = true
             splittedInstruction[1] = splittedInstruction[1].substring(1)
         }
@@ -32,9 +32,19 @@ class XeAssembler(var inputLines: List<String> = listOf()) {
             }
             //如果是切出兩段字串 有可能是(Label+指令) 或是 (指令+operand)
             2 -> if (splittedInstruction[0].isRealOpcodeOrPseudoOpcode()) {
-                return InstructionLine(null, splittedInstruction[0].toOpcode(), splittedInstruction[1].toOperand(), isFormat4)
+                return InstructionLine(
+                    null,
+                    splittedInstruction[0].toOpcode(),
+                    splittedInstruction[1].toOperand(),
+                    isFormat4
+                )
             } else if (splittedInstruction[1].isRealOpcodeOrPseudoOpcode()) {
-                return InstructionLine(splittedInstruction[0].toLabel(), splittedInstruction[1].toOpcode(), null, isFormat4)
+                return InstructionLine(
+                    splittedInstruction[0].toLabel(),
+                    splittedInstruction[1].toOpcode(),
+                    null,
+                    isFormat4
+                )
             }
             //如果是切出三段字串 有可能是(Label+指令+operand)
             3 -> if (splittedInstruction[1].isRealOpcodeOrPseudoOpcode())
@@ -168,29 +178,36 @@ class XeAssembler(var inputLines: List<String> = listOf()) {
 
                 }
                 //把M record記錄下來
-                for(mRecord in mRecordList){
+                for (mRecord in mRecordList) {
                     resultStringList.add(mRecord)
                 }
                 hasToChangeLine = false
-                //紀錄E record
-                resultStringList.add("E" + Integer.toHexString(startAddress).uppercase().padStart(6, '0'))
+                //如果END後面有提供一個位置，代表想設定可執行程式的開始位置
+                //如果沒提供，預設是從startAddress開始
+                var targetAddress = startAddress
+                if(currentLine.operand != null){
+                    targetAddress = symbolTable.get(currentLine.getIndexForSymbolTable())
+                        ?: startAddress
+                }
 
-            }else if(currentLine.opCode == OPCode.BASE){
+                //紀錄E record
+                resultStringList.add("E" + Integer.toHexString(targetAddress).uppercase().padStart(6, '0'))
+
+            } else if (currentLine.opCode == OPCode.BASE) {
                 //BASE是一個設定 base address的虛假指令
                 baseAddress = symbolTable.get(currentLine.getIndexForSymbolTable()) ?: 0
             } else if (currentLine.isRealOpcode()) {
 
 
-
                 //如果這行指令是個真指令
                 var currentLineString = currentLine.opCode?.toHexString()?.uppercase() ?: ""  //先取出opcode的16進位表示
-                if(currentLine.opCode?.format == 3){
+                if (currentLine.opCode?.format == 3) {
                     //nixbpe中的ni
-                    if(currentLine.isImmediateAddressing()){
+                    if (currentLine.isImmediateAddressing()) {
                         currentLineString = currentLine.opCode?.toImmediateHexString()?.uppercase() ?: ""
-                    }else if(currentLine.isIndirectAddressing()){
+                    } else if (currentLine.isIndirectAddressing()) {
                         currentLineString = currentLine.opCode?.toIndirectHexString()?.uppercase() ?: ""
-                    }else{
+                    } else {
                         currentLineString = currentLine.opCode?.toXeHexString()?.uppercase() ?: ""
                     }
 
@@ -201,43 +218,48 @@ class XeAssembler(var inputLines: List<String> = listOf()) {
                     var xbpe_String = if (currentLine.isIndexedAddressing()) "1" else "0"   //先以2進位紀錄_bit和address欄位
 
                     //如果找不到LABEL 又不是立即定址 代表有問題
-                    if(currentLine.operand!= null && symbolTable.get(currentLine.getIndexForSymbolTable()) == null && !currentLine.isImmediateAddressing()){
+                    if (currentLine.operand != null && symbolTable.get(currentLine.getIndexForSymbolTable()) == null && !currentLine.isImmediateAddressing()) {
                         println("($locationCounter) label not found")
                         exitProcess(-1)
                     }
 
-                    if(currentLine.operand==null){
+                    if (currentLine.operand == null) {
                         //如果沒有operand 代表後面都要填零
-                        if(currentLine.isFormat4()){
+                        if (currentLine.isFormat4()) {
                             currentLineString += "".padStart(6, '0')
-                        }else{
+                        } else {
                             currentLineString += "".padStart(4, '0')
                         }
-                    }else if(currentLine.isFormat4()){
+                    } else if (currentLine.isFormat4()) {
                         //format 4 的指令 bpe是001
                         xbpe_String += "001"
-                        currentLineString += Integer.toHexString(xbpe_String.toInt(2)).uppercase()  //再把xbpe轉成16進位(4個bit變1個Hex字元)
+                        currentLineString += Integer.toHexString(xbpe_String.toInt(2))
+                            .uppercase()  //再把xbpe轉成16進位(4個bit變1個Hex字元)
 
                         //如果這行指令是format 4，就去symbol table中找這個label所對應的絕對address
                         //如果找不到這個label ,就先假設他是立即值
                         var addressBinary =
-                            Integer.toBinaryString(symbolTable.get(currentLine.getIndexForSymbolTable()) ?: currentLine.getIndexForSymbolTable().toInt())
+                            Integer.toBinaryString(
+                                symbolTable.get(currentLine.getIndexForSymbolTable())
+                                    ?: currentLine.getIndexForSymbolTable().toInt()
+                            )
 
                         addressBinary = addressBinary.padStart(20, '0')  //沒有滿要補0
                         //把address欄位轉成16進位表示 (20個bit變5個Hex字元)
                         currentLineString += Integer.toHexString(addressBinary.toInt(2)).padStart(5, '0').uppercase()
 
                         //如果是format4，又沒有用直接定址(代表需要reference到其他地方)，就要記錄到m record中
-                        if(!currentLine.isImmediateAddressing()){
+                        if (!currentLine.isImmediateAddressingWithoutMemoryReference()) {
                             var mRecord = "M"
-                            mRecord += Integer.toHexString(locationCounter+1).padStart(6, '0').uppercase()
+                            mRecord += Integer.toHexString(locationCounter + 1).padStart(6, '0').uppercase()
                             mRecord += "05"
                             mRecordList.add(mRecord)
                         }
-                    }else{
+                    } else {
                         //format 3
                         //如果找不到這個label ,就假設他是立即值
-                        var targetAddress = symbolTable.get(currentLine.getIndexForSymbolTable()) ?: currentLine.getIndexForSymbolTable().toInt() //目標位址
+                        var targetAddress = symbolTable.get(currentLine.getIndexForSymbolTable())
+                            ?: currentLine.getIndexForSymbolTable().toInt() //目標位址
 
                         //先試著用PC relative addressing
                         val pc_address = locationCounter + currentLine.instructionLength
@@ -245,25 +267,27 @@ class XeAssembler(var inputLines: List<String> = listOf()) {
                         val baseOffset = targetAddress - baseAddress
                         var displacement = ""
 
-                        if(symbolTable.get(currentLine.getIndexForSymbolTable()) == null && currentLine.isImmediateAddressing()){
+                        if (symbolTable.get(currentLine.getIndexForSymbolTable()) == null && currentLine.isImmediateAddressing()) {
                             //如果找不到這個label 又是立即定址 代表是個單純的立即值
                             displacement = "%04x".format(targetAddress).takeLast(4).uppercase()
-                        }else if(pcOffset >= -2048 && pcOffset <= 2047){
+                        } else if (pcOffset >= -2048 && pcOffset <= 2047) {
                             //如果PC relative addressing可以用
                             //bpe是010
                             xbpe_String += "010"
-                            currentLineString += Integer.toHexString(xbpe_String.toInt(2)).uppercase()  //再把xbpe轉成16進位(4個bit變1個Hex字元)
+                            currentLineString += Integer.toHexString(xbpe_String.toInt(2))
+                                .uppercase()  //再把xbpe轉成16進位(4個bit變1個Hex字元)
                             //把PC relative addressing的offset轉成16進位表示 (12個bit變3個Hex字元)
                             displacement = "%03x".format(pcOffset).takeLast(3).uppercase()
-                        }else if(baseAddress >= 0 && baseOffset <= 4095){
+                        } else if (baseAddress >= 0 && baseOffset <= 4095) {
                             //PC relative addressing不行 再用base relative addressing
                             //如果base relative addressing可以用
                             //bpe是011
                             xbpe_String += "100"
-                            currentLineString += Integer.toHexString(xbpe_String.toInt(2)).uppercase()  //再把xbpe轉成16進位(4個bit變1個Hex字元)
+                            currentLineString += Integer.toHexString(xbpe_String.toInt(2))
+                                .uppercase()  //再把xbpe轉成16進位(4個bit變1個Hex字元)
                             //把base relative addressing的offset轉成16進位表示 (12個bit變3個Hex字元)
                             displacement = "%03x".format(baseOffset).takeLast(3).uppercase()
-                        }else{
+                        } else {
                             //PC BASE都不行就提醒用戶要改用format 4
                             println("($locationCounter)you need to use format 4")
                             exitProcess(-1)
@@ -271,10 +295,10 @@ class XeAssembler(var inputLines: List<String> = listOf()) {
                         currentLineString += displacement
 
                     }
-                }else if(currentLine.opCode?.format == 2){
+                } else if (currentLine.opCode?.format == 2) {
                     //拆成兩個Register代號
-                    currentLineString+=currentLine.operand?.toFormat2RegisterField()
-                }else if(currentLine.opCode?.format == 1){
+                    currentLineString += currentLine.operand?.toFormat2RegisterField()
+                } else if (currentLine.opCode?.format == 1) {
                     //不用做事
                 }
 
@@ -397,14 +421,14 @@ data class Operand(val value: String) {
 
     fun toFormat2RegisterField(): String {
         val splitOperand = value.split(",")
-        if(splitOperand.size == 2) {
+        if (splitOperand.size == 2) {
             return splitOperand[0].toRegister().toHexString() + splitOperand[1].toRegister().toHexString()
         }
-        return  splitOperand[0].toRegister().toHexString() + "0"
+        return splitOperand[0].toRegister().toHexString() + "0"
     }
 }
 
-enum class Register(val hexCode:Int){
+enum class Register(val hexCode: Int) {
     A(0x0),
     X(0x1),
     L(0x2),
@@ -414,6 +438,7 @@ enum class Register(val hexCode:Int){
     S(0x4),
     T(0x5),
     F(0x6);
+
     //將opcode轉乘16進位表示的字串
     fun toHexString(): String {
         return Integer.toHexString(hexCode).uppercase().padStart(1, '0')
@@ -422,11 +447,16 @@ enum class Register(val hexCode:Int){
 
 data class Label(val name: String)  //標籤
 
-data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: Operand?,val format4:Boolean = false) {
+data class InstructionLine(
+    val label: Label?,
+    val opCode: OPCode?,
+    val operand: Operand?,
+    val format4: Boolean = false
+) {
 
     val instructionLength: Int
         get() {
-            if(format4) return 4
+            if (format4) return 4
             return opCode?.format ?: 3
         }
 
@@ -437,7 +467,7 @@ data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: 
         return this.operand.value.uppercase().endsWith(",X") //如果operand的最後一個字是,X就代表是Indexed Addressing
     }
 
-    fun isFormat4():Boolean{
+    fun isFormat4(): Boolean {
         return this.format4
     }
 
@@ -445,6 +475,17 @@ data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: 
         if (operand == null) return false
         return this.operand.startWithHash() //如果operand的第一個字是#就代表是立即定址
     }
+
+    private fun isNumeric(toCheck: String): Boolean {
+        return toCheck.all { char -> char.isDigit() }
+    }
+
+    //是不是沒有memory reference的immediate Addressing
+    fun isImmediateAddressingWithoutMemoryReference():Boolean{
+        if(isImmediateAddressing() && isNumeric(getIndexForSymbolTable())) return true  //如果是數字 代表沒有memory refrence
+        return false
+    }
+
 
     fun isIndirectAddressing(): Boolean {
         if (operand == null) return false
@@ -469,9 +510,9 @@ data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: 
             return this.operand?.value?.substring(0, this.operand.value.length - 2)?.trim()!!
         }
 
-        if(isImmediateAddressing() || isIndirectAddressing()){
+        if (isImmediateAddressing() || isIndirectAddressing()) {
             //去掉operand中的 # 或是 @
-            return this.operand?.value?.substring(1,this.operand.value.length)?.trim()!!
+            return this.operand?.value?.substring(1, this.operand.value.length)?.trim()!!
         }
         return this.operand?.value!!
     }
@@ -480,7 +521,7 @@ data class InstructionLine(val label: Label?, val opCode: OPCode?, val operand: 
 
 //opcode
 //預設是format 3
-enum class OPCode(val hex: Int, val isPseudo: Boolean = false,val format:Int = 3) {
+enum class OPCode(val hex: Int, val isPseudo: Boolean = false, val format: Int = 3) {
     ADD(0x18),
     ADDF(0X58),
     ADDR(0x90, format = 2),
@@ -545,7 +586,7 @@ enum class OPCode(val hex: Int, val isPseudo: Boolean = false,val format:Int = 3
     BYTE(PSEUDO, true, 0),
     RESW(PSEUDO, true, 0),
     RESB(PSEUDO, true, 0),
-    BASE(PSEUDO,true,0),
+    BASE(PSEUDO, true, 0),
     END(PSEUDO, true, 0);
 
 
@@ -554,19 +595,19 @@ enum class OPCode(val hex: Int, val isPseudo: Boolean = false,val format:Int = 3
         return Integer.toHexString(hex).uppercase().padStart(2, '0')
     }
 
-    fun toIndirectHexString(): String{
+    fun toIndirectHexString(): String {
         //n_bit 設為1
-        return Integer.toHexString(hex+0x2).uppercase().padStart(2, '0')
+        return Integer.toHexString(hex + 0x2).uppercase().padStart(2, '0')
     }
 
-    fun toImmediateHexString(): String{
+    fun toImmediateHexString(): String {
         //i_bit 設為1
-        return Integer.toHexString(hex+0x1).uppercase().padStart(2, '0')
+        return Integer.toHexString(hex + 0x1).uppercase().padStart(2, '0')
     }
 
-    fun toXeHexString(): String{
+    fun toXeHexString(): String {
         //n_bit和i_bit 都設為1
-        return Integer.toHexString(hex+0x3).uppercase().padStart(2, '0')
+        return Integer.toHexString(hex + 0x3).uppercase().padStart(2, '0')
     }
 
 }

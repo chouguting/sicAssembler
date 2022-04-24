@@ -6,10 +6,10 @@ import kotlin.system.exitProcess
 
 class FileLoader(private val fileName: String) {
     fun loadFileToLines(): List<String> {
-        lateinit var inputLines:List<String>
+        lateinit var inputLines: List<String>
         try {
             inputLines = File(fileName).useLines { it.toList() }
-        }catch (e: FileNotFoundException) {
+        } catch (e: FileNotFoundException) {
             println("File not found" + e)
             println("找不到指定的檔案(如果未指定檔案預設是會讀入 input.asm)")
             println("請特別注意 txt檔要放在和jar檔同一個資料夾下")

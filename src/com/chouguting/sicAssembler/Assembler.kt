@@ -152,8 +152,15 @@ class Assembler(var inputLines: List<String> = listOf()) {
 
                 }
                 hasToChangeLine = false
+                //如果END後面有提供一個位置，代表想設定可執行程式的開始位置
+                //如果沒提供，預設是從startAddress開始
+                var targetAddress = startAddress
+                if(currentLine.operand != null){
+                    targetAddress = symbolTable.get(currentLine.getIndexForSymbolTable())
+                        ?: startAddress
+                }
                 //紀錄E record
-                resultStringList.add("E" + Integer.toHexString(startAddress).uppercase().padStart(6, '0'))
+                resultStringList.add("E" + Integer.toHexString(targetAddress).uppercase().padStart(6, '0'))
 
             } else if (currentLine.isRealOpcode()) {
                 //如果這行指令是個真指令
