@@ -1,4 +1,4 @@
-# sic/Xe Assembler
+# SIC/SIC XE Assembler
 使用Kotlin實作 SIC及 SIC XE的組譯器(Assembler)
 
 使用方式：
